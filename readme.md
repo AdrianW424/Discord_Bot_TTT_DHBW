@@ -20,4 +20,6 @@ Functions:
 
 ## TODO
 - add functionalities to xoyondo class
+- change functionalities of xoyondo class
+    - range of dates and range of integers -> print out of bounds message if too large (similar to integers)
 - integrate xoyondo class to bot class
