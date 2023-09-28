@@ -26,10 +26,10 @@ class Xoyondo:
             print_messages (bool, optional): Whether to print messages to the console. Defaults to True.
         """
         
-        self.url = url
-        self.id, self.password = self.__extract_from_url(self.url)
-        self.headers = headers
         self.print_messages = print_messages
+        self.url = url
+        self.id, self.password, _ = self.__extract_from_url(self.url)
+        self.headers = headers
     
     def __extract_from_url(self, url):  # throws ValueError
         """Extract ID and password from a given Xoyondo URL.
@@ -43,6 +43,7 @@ class Xoyondo:
         Returns:
             tuple: A tuple containing the extracted user ID and password from the URL.
         """
+        messages = []
         
         pattern= r'^https://xoyondo\.com/dp/([^/]+)/([^/]+)$'
         match = re.match(pattern, url)
@@ -52,7 +53,27 @@ class Xoyondo:
             raise ValueError(f"Invalid URL format: {url}")
         ###
         
-        return match.groups()
+        id, password = match.groups()
+        
+        self.log_message(f"URL has correct format. Consisting of ID: {id} and password: {password}", messages)
+        
+        return id, password, messages
+    
+    def set_url(self, url):
+        """Updates the object's URL and extracts the user ID and password from the new URL.
+
+        Args:
+            url (str): The new URL that might contain user ID and password information.
+        """
+        messages = []
+        
+        self.url = url
+        self.id, self.password, _messages = self.__extract_from_url(self.url)
+        messages.extend(_messages)
+        
+        self.log_message(f"Changed URL to: {url}", messages)
+        
+        return messages
     
     @dispatch(str, str)
     def get_date_list(self, start, end):    # throws ValueError
@@ -75,7 +96,9 @@ class Xoyondo:
             try:
                 end_date = datetime.strptime(end, '%Y/%m/%d')
                 delta = end_date - start_date
-                return [(start_date + timedelta(days=i)).strftime('%Y/%m/%d') for i in range(delta.days + 1)], messages
+                date_list = [(start_date + timedelta(days=i)).strftime('%Y/%m/%d') for i in range(delta.days + 1)]
+                self.log_message(f"Generated date list from {start} to {end}", messages)
+                return date_list, messages
             except ValueError:
                 raise ValueError(f"Invalid end date: {end}")
         except ValueError:
@@ -96,16 +119,19 @@ class Xoyondo:
                     dates_buf, _messages = self.get_date_list(start, end)
                     dates.extend(dates_buf)
                     messages.extend(_messages)
+                    self.log_message(f"Added date list from {start} to {end} to date list", messages)
                 else:
                     try:
                         _ = datetime.strptime(part.strip(), '%Y/%m/%d')
                         dates.append(part.strip())
+                        self.log_message(f"Added date {part.strip()} to date list", messages)
                     except ValueError:
                         raise ValueError(f"Invalid date: {part.strip()}")
         else:
             try:
                 _ = datetime.strptime(dates.strip(), '%Y/%m/%d')
                 dates = [dates.strip()]
+                self.log_message(f"Added date {dates.strip()} to date list", messages)
             except ValueError:
                 raise ValueError(f"Invalid date: {dates.strip()}")
             
@@ -134,6 +160,8 @@ class Xoyondo:
         response.raise_for_status()
         ###
         
+        self.log_message(f"Successfully fetched webpage: {url}", messages)
+        
         return BeautifulSoup(response.content, features), messages
     
     def log_message(self, new_message, list_of_messages):
@@ -147,15 +175,6 @@ class Xoyondo:
         list_of_messages.append(new_message)
         if self.print_messages:
             print(new_message)
-        
-    def set_url(self, url):
-        """Updates the object's URL and extracts the user ID and password from the new URL.
-
-        Args:
-            url (str): The new URL that might contain user ID and password information.
-        """
-        self.url = url
-        self.id, self.password = self.__extract_from_url(self.url)
     
     def delete_dates(self, dates:str=None):
         messages = []
@@ -201,6 +220,7 @@ class Xoyondo:
 
                                     if start <= end:
                                         dates_to_delete.extend(date_to_id[date] for i, date in enumerate(date_to_id.keys()) if start <= i <= end)
+                                        self.log_message(f"Added dates from {list(date_to_id.keys())[start]} to {list(date_to_id.keys())[end]} to deletion list", messages)
                                     else:
                                         raise ValueError(f"Start index must be less than or equal to end index. Given: {start}:{end}")
                                     
@@ -217,6 +237,7 @@ class Xoyondo:
                             for date in dates:
                                 if date.strip() in date_to_id:
                                     dates_to_delete.append(date_to_id[date.strip()])
+                                    self.log_message(f"Added date {date.strip()} to deletion list", messages)
                                 else:
                                     raise ValueError(f"No such date to delete: {date.strip()}")
                     else:
@@ -226,12 +247,14 @@ class Xoyondo:
                                 
                                 if -len(date_to_id) <= index < len(date_to_id):
                                     dates_to_delete.append(date_to_id[list(date_to_id.keys())[index if index > 0 else index]])
+                                    self.log_message(f"Added date {list(date_to_id.keys())[index if index > 0 else index]} to deletion list", messages)
                                 else:
                                     raise ValueError(f"Index {index} out of range.")
                             except ValueError:
                                 raise ValueError(f"Invalid index: {part.strip()}")
                         elif part.strip() in date_to_id:
                             dates_to_delete.append(date_to_id[part.strip()])
+                            self.log_message(f"Added date {part.strip()} to deletion list", messages)
                         else:
                             raise ValueError(f"No such date to delete: {part.strip()}")
             else:
@@ -241,12 +264,14 @@ class Xoyondo:
                         
                         if -len(date_to_id) <= index < len(date_to_id):
                             dates_to_delete.append(date_to_id[list(date_to_id.keys())[index if index > 0 else index]])
+                            self.log_message(f"Added date {list(date_to_id.keys())[index if index > 0 else index]} to deletion list", messages)
                         else:
                             raise ValueError(f"Index {index} out of range.")
                     except ValueError:
                         raise ValueError(f"Invalid index: {dates.strip()}")
                 elif dates.strip() in date_to_id:
                     dates_to_delete.append(date_to_id[dates.strip()])
+                    self.log_message(f"Added date {dates.strip()} to deletion list", messages)
                 else:
                     raise ValueError(f"No such date to delete: {dates.strip()}")
         
@@ -310,11 +335,13 @@ class Xoyondo:
                         dates, _messages = self.get_date_list(start, end)
                         messages.extend(_messages)
                         dates_to_add.extend(dates)
+                        self.log_message(f"Added date list from {start} to {end} to add list", messages)
                     else:
                         # check for valid date format
                         try:
                             datetime.strptime(part.strip(), '%Y/%m/%d')
                             dates_to_add.append(part.strip())
+                            self.log_message(f"Added date {part.strip()} to add list", messages)
                         except ValueError:
                             raise ValueError(f"Invalid date: {part.strip()}")
             else:
@@ -322,6 +349,7 @@ class Xoyondo:
                 try:
                     datetime.strptime(dates.strip(), '%Y/%m/%d')
                     dates_to_add.append(dates.strip())
+                    self.log_message(f"Added date {dates.strip()} to add list", messages)
                 except ValueError:
                     raise ValueError(f"Invalid date: {dates.strip()}")
             
@@ -377,6 +405,7 @@ class Xoyondo:
         date_to_id = {el['data-date']: el['data-dateid'] for el in date_elements}
         
         dates = list(date_to_id.keys())
+        self.log_message(f"Found dates: {dates}", messages)
         
         return dates, messages
         
@@ -401,8 +430,10 @@ class Xoyondo:
                     user_name = user_elems[-1]
                     if user_name in user_names_to_delete:
                         user_ids_to_delete.append(user_element['data-userid'])
+                        self.log_message(f"Added user with name {user_name} to deletion list", messages)
         else:  # If no username is provided, delete all users
             user_ids_to_delete = [el['data-userid'] for el in user_elements]
+            self.log_message(f"Added all users to deletion list", messages)
         
         if len(user_ids_to_delete) < 1:
             self.log_message("Deletion not possible as there is no user registered.", messages)
@@ -457,6 +488,7 @@ class Xoyondo:
                 user_elems = list(user_name_element.stripped_strings)
                 user_name = user_elems[-1]
                 users.append(user_name)
+                self.log_message(f"Found user with name {user_name}", messages)
         
         return users, messages
         
@@ -514,6 +546,7 @@ class Xoyondo:
                             
                             if start <= end:
                                 indices.extend(range(start, end + 1))
+                                self.log_message(f"Added indices from {start} to {end} to index list", messages)
                             else:
                                 raise ValueError(f"Start index must be less than or equal to end index: {start}:{end}")
                             
@@ -526,6 +559,7 @@ class Xoyondo:
                 else:
                     try:
                         indices.append(int(part))
+                        self.log_message(f"A: Added index {part} to index list", messages)
                     except ValueError:
                         raise ValueError(f"Invalid index: {part}")
             indices = [(i + len(date_results)) if i < 0 else i for i in indices]
@@ -533,6 +567,8 @@ class Xoyondo:
 
         else:
             filtered_results = date_results
+            
+        self.log_message(f"Found votes: {filtered_results}", messages)
             
         
         formatted_results = []
@@ -620,6 +656,8 @@ class Xoyondo:
                 
         if len(user_votes) < 1:
             self.log_message(f"No user found for given name {user}", messages)
+            
+        self.log_message(f"Found votes: {user_votes}", messages)
         
         return user_votes, messages
         
@@ -627,6 +665,7 @@ class Xoyondo:
     
     def get_date_for_index(self, index:str = None):
         messages = []
+        dates_for_indices = []
         html, _messages = self.__get_webpage(self.url, self.headers)
         messages.extend(_messages)
         
@@ -657,6 +696,7 @@ class Xoyondo:
                             
                             if start <= end:
                                 indices.extend(range(start, end + 1))
+                                self.log_message(f"Added indices from {start} to {end} to index list", messages)
                             else:
                                 raise ValueError(f"Start index must be less than or equal to end index. Given: {start}:{end}")
                             
@@ -673,6 +713,7 @@ class Xoyondo:
                         
                         if 0 <= idx < len(date_to_id):
                             indices.append(idx)
+                            self.log_message(f"B: Added index {idx} to index list", messages)
                         else:
                             raise ValueError(f"Index {idx} out of range.")
                     
@@ -704,14 +745,17 @@ class Xoyondo:
                     messages.extend(_messages)
                     valid_dates = [date for date in dates if date in date_to_id]
                     indices_to_return.extend(list(date_to_id.keys()).index(date) for date in valid_dates)
+                    self.log_message(f"Added indices from {start} to {end} to index list", messages)
                 else:
                     if part.strip() in date_to_id:
                         indices_to_return.append(list(date_to_id.keys()).index(part.strip()))
+                        self.log_message(f"C: Added index {part.strip()} to index list", messages)
                     else:
                         raise ValueError(f"Invalid date: {part.strip()}")
         else:
             if dates.strip() in date_to_id:
                 indices_to_return.append(list(date_to_id.keys()).index(dates.strip()))
+                self.log_message(f"C: Added index {dates.strip()} to index list", messages)
             else:
                 raise ValueError(f"Invalid date: {dates.strip()}")
         

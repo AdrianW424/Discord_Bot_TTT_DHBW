@@ -24,6 +24,10 @@ class Xoyondo_Wrapper(xy.Xoyondo):
                         first_day_of_week = datetime.datetime.strptime(f'{year}-W{week_number} -1', "%Y-W%W -%w")
                         last_day_of_week = first_day_of_week + datetime.timedelta(days=6)
                         date_range = f"{first_day_of_week.strftime('%Y/%m/%d')}:{last_day_of_week.strftime('%Y/%m/%d')}"
+                        
+                        self.log_message(f'{week} corresponds to {date_range}', messages)
+                        
+                        return date_range, messages
                     except ValueError:
                         raise ValueError(f'Invalied input: {week}')
                 except ValueError:
@@ -32,8 +36,6 @@ class Xoyondo_Wrapper(xy.Xoyondo):
                 raise ValueError(f'Year {year} is not a valid number.')
         else:
             raise ValueError(f'Invalid input: {week}')
-
-        return date_range, messages
     
         # Kalenderwoche heraussuchen und in Datum umwandeln -> zum Beispiel 2023/09/18:2023/09/24 - als range
 
@@ -57,6 +59,10 @@ class Xoyondo_Wrapper(xy.Xoyondo):
                         first_day_of_month = f'{year}/{month_number}/01'
                         last_day_of_month = f'{year}/{month_number}/{last_day}'
                         date_range = f"{first_day_of_month}:{last_day_of_month}"
+                        
+                        self.log_message(f'{month} corresponds to {date_range}', messages)
+                        
+                        return date_range, messages
                     else:
                         raise ValueError(f'Month {month_number} is not valid. It should be between 1 and 12.')
                 except ValueError:
@@ -65,8 +71,6 @@ class Xoyondo_Wrapper(xy.Xoyondo):
                 raise ValueError(f'Year {year} is not a valid number.')
         else:
             raise ValueError(f'Invalid input: {month}')
-
-        return date_range, messages
     
     def reset_poll(self, add_dates):
         
@@ -142,9 +146,6 @@ class Xoyondo_Wrapper(xy.Xoyondo):
         question_count = [int(vote['question_count']) for vote in votes]
         
         _, ax = plt.subplots(figsize=(10,5))
-        
-        print(labels)
-        print(yes_count, no_count, maybe_count, question_count)
         
         colors = {'Ja': 'g', 'Vielleicht': 'y', 'Nein': 'r', 'Keine Angabe': 'grey'}
         
