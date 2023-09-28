@@ -102,7 +102,6 @@ class Xoyondo_Wrapper(xy.Xoyondo):
             if to_add:
                 _messages = self.add_dates(",".join(to_add))
                 messages.extend(_messages)
-                
 
             # Delete all remaining existing dates
             to_delete = []

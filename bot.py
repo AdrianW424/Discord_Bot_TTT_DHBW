@@ -52,6 +52,7 @@ async def on_message(message):
         except Exception as e:
             await message.channel.send(f'Error: {e}')
     else:
-        await message.channel.send('Unknown command')
+        if message.content.startswith('!'):
+            await message.channel.send('Unknown command')
 
 client.run(TOKEN)
