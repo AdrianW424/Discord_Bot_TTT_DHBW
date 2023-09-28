@@ -19,7 +19,12 @@ Functions:
         - integer: 0 = all dates, 1 = first date, 2 = second date, ..., -1 = last date, -2 = second last date, ...
 
 ## TODO
-- add functionalities to xoyondo class
-- change functionalities of xoyondo class
-    - range of dates and range of integers -> print out of bounds message if too large (similar to integers)
-- integrate xoyondo class to bot class
+- add better message classification
+- create wrapper xoyondo class
+    - add plotting
+        - better width distribution for date displaying
+        - only 7 days at once -> for more show message
+    - get results (if less than 5 persons have voted for a date - more persons have to vote)
+    - reset poll
+        - add new principle (consistency)
+- integrate xoyondo and xoyondo_wrapper class to bot class

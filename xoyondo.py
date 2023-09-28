@@ -3,8 +3,11 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from collections import OrderedDict
 import re
+import threading
+import queue
+from multipledispatch import dispatch
 
-class xoyondo:
+class Xoyondo:
     """_summary_
     
     Attributes:
@@ -28,7 +31,7 @@ class xoyondo:
         self.headers = headers
         self.print_messages = print_messages
     
-    def __extract_from_url(self, url):
+    def __extract_from_url(self, url):  # throws ValueError
         """Extract ID and password from a given Xoyondo URL.
 
         Args:
@@ -46,12 +49,13 @@ class xoyondo:
         
         ### Error handling (ValueError)
         if not match:
-            raise ValueError("Invalid URL format.")
+            raise ValueError(f"Invalid URL format: {url}")
         ###
         
         return match.groups()
     
-    def __get_date_range(self,start, end):
+    @dispatch(str, str)
+    def get_date_list(self, start, end):    # throws ValueError
         """Generate a list of dates in the format '%Y/%m/%d' between two given dates (inclusive).
 
         Args:
@@ -61,13 +65,53 @@ class xoyondo:
         Returns:
             list: A list of dates as strings in the format '%Y/%m/%d' from the start date to the end date, inclusive.
         """
+        messages = []
         
-        start_date = datetime.strptime(start, '%Y/%m/%d')
-        end_date = datetime.strptime(end, '%Y/%m/%d')
-        delta = end_date - start_date
-        return [(start_date + timedelta(days=i)).strftime('%Y/%m/%d') for i in range(delta.days + 1)]
+        start = str(start)
+        end = str(end)
+        
+        try:
+            start_date = datetime.strptime(start, '%Y/%m/%d')
+            try:
+                end_date = datetime.strptime(end, '%Y/%m/%d')
+                delta = end_date - start_date
+                return [(start_date + timedelta(days=i)).strftime('%Y/%m/%d') for i in range(delta.days + 1)], messages
+            except ValueError:
+                raise ValueError(f"Invalid end date: {end}")
+        except ValueError:
+            raise ValueError(f"Invalid start date: {start}")
+        
+    @dispatch(str)
+    def get_date_list(self, dates):
+        
+        messages = []
+        
+        dates = str(dates)
+        if "," in dates or ":" in dates:
+            parts = dates.split(",")
+            dates = []
+            for part in parts:
+                if ":" in part:
+                    start, end = [x.strip() for x in part.split(":")]
+                    dates_buf, _messages = self.get_date_list(start, end)
+                    dates.extend(dates_buf)
+                    messages.extend(_messages)
+                else:
+                    try:
+                        _ = datetime.strptime(part.strip(), '%Y/%m/%d')
+                        dates.append(part.strip())
+                    except ValueError:
+                        raise ValueError(f"Invalid date: {part.strip()}")
+        else:
+            try:
+                _ = datetime.strptime(dates.strip(), '%Y/%m/%d')
+                dates = [dates.strip()]
+            except ValueError:
+                raise ValueError(f"Invalid date: {dates.strip()}")
+            
+        return dates, messages
     
-    def __get_webpage(self, url, headers, features="html.parser"):
+    def __get_webpage(self, url, headers, features="html.parser"):  # throws HTTPError
         """Fetches the content of a webpage using the provided URL and headers, and then parses it using BeautifulSoup.
 
         Args:
@@ -82,15 +126,17 @@ class xoyondo:
             BeautifulSoup: A BeautifulSoup object containing the parsed content of the webpage.
         """
         
+        messages = []
+        
         response = requests.get(url, headers=headers)
         
         ### Error handling (HTTPError)
         response.raise_for_status()
         ###
         
-        return BeautifulSoup(response.content, features)
+        return BeautifulSoup(response.content, features), messages
     
-    def __output_message(self, new_message, list_of_messages):
+    def log_message(self, new_message, list_of_messages):
         """Prints a message to the console and adds it to a list of messages.
 
         Args:
@@ -102,7 +148,7 @@ class xoyondo:
         if self.print_messages:
             print(new_message)
         
-    def change_url(self, url):
+    def set_url(self, url):
         """Updates the object's URL and extracts the user ID and password from the new URL.
 
         Args:
@@ -111,100 +157,119 @@ class xoyondo:
         self.url = url
         self.id, self.password = self.__extract_from_url(self.url)
     
-    def delete_date(self, dates:str):
+    def delete_dates(self, dates:str=None):
         messages = []
+        dates_to_delete = []
         
-        html = self.__get_webpage(self.url, self.headers)
+        html, _messages = self.__get_webpage(self.url, self.headers)
+        messages.extend(_messages)
         date_elements = html.find_all('i', {'class': 'fa fa-edit js-date-edit-cal text-warning pointer mx-1'})
         date_to_id = {el['data-date']: el['data-dateid'] for el in date_elements}
         
-        dates_to_delete = []
-        
         if len(date_to_id) <= 1:
-            self.__output_message("Deletion not possible as there is only one date left.", messages)
+            self.log_message("Deletion not possible as there is only one date left.", messages)
             return messages
         elif dates is None:
             dates_to_delete = list(date_to_id.values())
-            self.__output_message("Deletion not possible as there will be no date left.", messages)
-        elif "," in dates or ":" in dates:
-            parts = dates.split(",")
-            for part in parts:
-                if ":" in part:
-                    start, end = [x.strip() for x in part.split(":")]
-                    
-                    # Check if the range is valid
-                    if start.isdigit() and end.isdigit() and int(start) <= int(end):
-                        # positive numbers
-                        start, end = int(start), int(end)
-                        if len(date_to_id) <= start:
-                            self.__output_message(f"Index {start} out of range.", messages)
-                        elif len(date_to_id) <= end:
-                            self.__output_message(f"Index {end} out of range.", messages)
-                        dates_to_delete.extend(date_to_id[date] for i, date in enumerate(date_to_id.keys()) if start <= i <= end)
-                    elif start.replace('-', '').isdigit() and end.replace('-', '').isdigit():
-                        # at least one negative number
-                        start, end = int(start), int(end)
-                        if start < 0:
-                            start = len(date_to_id) + start
-                            if len(date_to_id) <= start or start < 0:
-                                self.__output_message(f"Index {start} out of range.", messages)
-                        if end < 0:
-                            end = len(date_to_id) + end
-                            if len(date_to_id) <= end or end < 0:
-                                self.__output_message(f"Index {end} out of range.", messages)
-                            
-                        if start <= end:
-                            dates_to_delete.extend(date_to_id[date] for i, date in enumerate(date_to_id.keys()) if start <= i <= end)
+            self.log_message(f"Full deletion not possible as there will be '{list(date_to_id.keys())[-1]}' left.", messages)
+        else:
+            dates = str(dates)
+            if "," in dates or ":" in dates:
+                parts = dates.split(",")
+                for part in parts:
+                    if ":" in part:
+                        start, end = [x.strip() for x in part.split(":")]
+                        
+                        # Check if the range is valid
+                        if start.replace('-', '').isdigit() and end.replace('-', '').isdigit():
+                            # at least one negative number
+
+                            try:
+                                start = int(start)
+                                
+                                try:
+                                    end = int(end)
+                                    
+                                    if start < 0:
+                                        start = len(date_to_id) + start
+                                    if len(date_to_id) <= start or start < 0:
+                                        raise ValueError(f"Index {start} out of range.")
+                                    if end < 0:
+                                        end = len(date_to_id) + end
+                                    if len(date_to_id) <= end or end < 0:
+                                        raise ValueError(f"Index {end} out of range.")
+
+                                    if start <= end:
+                                        dates_to_delete.extend(date_to_id[date] for i, date in enumerate(date_to_id.keys()) if start <= i <= end)
+                                    else:
+                                        raise ValueError(f"Start index must be less than or equal to end index. Given: {start}:{end}")
+                                    
+                                except ValueError:
+                                    raise ValueError(f"Invalid index: {end.strip()}")
+                                    
+                            except ValueError:
+                                raise ValueError(f"Invalid index: {start.strip()}")
+                                
                         else:
-                            self.__output_message(f"Start must be located before end. In this case start is {start} and end is {end}.", messages)
+                            # dates
+                            dates, _messages = self.get_date_list(start, end)
+                            messages.extend(_messages)
+                            for date in dates:
+                                if date.strip() in date_to_id:
+                                    dates_to_delete.append(date_to_id[date.strip()])
+                                else:
+                                    raise ValueError(f"No such date to delete: {date.strip()}")
                     else:
-                        # dates
-                        dates_to_delete.extend(date_id for date in self.__get_date_range(start, end) if date in date_to_id for date_id in [date_to_id[date]])
-                else:
-                    if part.replace('-', '').isdigit():
-                        index = int(part)
+                        if part.replace('-', '').isdigit():
+                            try:
+                                index = int(part)
+                                
+                                if -len(date_to_id) <= index < len(date_to_id):
+                                    dates_to_delete.append(date_to_id[list(date_to_id.keys())[index if index > 0 else index]])
+                                else:
+                                    raise ValueError(f"Index {index} out of range.")
+                            except ValueError:
+                                raise ValueError(f"Invalid index: {part.strip()}")
+                        elif part.strip() in date_to_id:
+                            dates_to_delete.append(date_to_id[part.strip()])
+                        else:
+                            raise ValueError(f"No such date to delete: {part.strip()}")
+            else:
+                if dates.replace('-', '').isdigit():    
+                    try:
+                        index = int(dates)
+                        
                         if -len(date_to_id) <= index < len(date_to_id):
                             dates_to_delete.append(date_to_id[list(date_to_id.keys())[index if index > 0 else index]])
                         else:
-                            self.__output_message(f"Index {index} out of range.", messages)
-                    elif part.strip() in date_to_id:
-                        dates_to_delete.append(date_to_id[part.strip()])
-                    else:
-                        self.__output_message(f"Invalid date: {part.strip()}", messages)
-        else:
-            if dates.replace('-', '').isdigit():
-                index = int(dates)
-                if -len(date_to_id) <= index < len(date_to_id):
-                    dates_to_delete.append(date_to_id[list(date_to_id.keys())[index if index > 0 else index]])
+                            raise ValueError(f"Index {index} out of range.")
+                    except ValueError:
+                        raise ValueError(f"Invalid index: {dates.strip()}")
+                elif dates.strip() in date_to_id:
+                    dates_to_delete.append(date_to_id[dates.strip()])
                 else:
-                    self.__output_message(f"Index {index} out of range.", messages)
-            elif dates.strip() in date_to_id:
-                dates_to_delete.append(date_to_id[dates.strip()])
-            else:
-                self.__output_message(f"Invalid date: {dates.strip()}", messages)
+                    raise ValueError(f"No such date to delete: {dates.strip()}")
         
         dates_to_delete = list(OrderedDict.fromkeys(dates_to_delete))  # Remove duplicates while maintaining order
         
         remaining_dates = set(date_to_id.values()) - set(dates_to_delete)
         if len(remaining_dates) < 1:
-            self.__output_message("Deletion will result in only one date being left. It is thus not possible.", messages)
+            self.log_message("Deletion will result in only one date being left. It is thus not possible.", messages)
             dates_to_delete = dates_to_delete[:-1]
-        
-        delete_url = "https://xoyondo.com/pc/poll-change-poll"
+            
+        threads = []
+        message_queue = queue.Queue()
         for date_id in dates_to_delete:
-            form_data = {
-                'ID': self.id,
-                'product': 'd',
-                'dateID': date_id,
-                'operation': 'date_delete',
-                'pass': self.password
-            }
-            delete_response = requests.post(delete_url, headers=self.headers, data=form_data)
-            if delete_response.status_code == 200:
-                self.__output_message(f'Successfully deleted date with ID {date_id}', messages)
-            else:
-                self.__output_message(f'Failed to delete date with ID {date_id}: HTTP {delete_response.status_code}', messages)
-                
+            thread = threading.Thread(target=self.__delete_date, args=("https://xoyondo.com/pc/poll-change-poll", date_id, message_queue))
+            threads.append(thread)
+            thread.start()
+            
+        for thread in threads:
+            thread.join()
+            
+        while not message_queue.empty():
+            messages.extend(message_queue.get())
+        
         return messages
         
         # check if right format (date and list of dates)
@@ -212,177 +277,443 @@ class xoyondo:
         # delete every date given in the list of dates
         # if user wanted to delete every date give hint, that the last date could not be deleted due to xoyondo restrictions
 
-    def add_date(self, dates):
+    def __delete_date(self, delete_url, date_id, message_queue):
+        messages = []
+        
+        form_data = {
+            'ID': self.id,
+            'product': 'd',
+            'dateID': date_id,
+            'operation': 'date_delete',
+            'pass': self.password
+        }
+        delete_response = requests.post(delete_url, headers=self.headers, data=form_data)
+        if delete_response.status_code == 200:
+            self.log_message(f'Successfully deleted date with ID {date_id}', messages)
+        else:
+            self.log_message(f'Failed to delete date with ID {date_id}: HTTP {delete_response.status_code}', messages)
+                
+        message_queue.put(messages)
+
+    def add_dates(self, dates):
         messages = []
         dates_to_add = []
-
-        if "," in dates or ":" in dates:
-            parts = dates.split(",")
-            for part in parts:
-                if ":" in part:
-                    start, end = [x.strip() for x in part.split(":")]
-                    dates_to_add.extend(self.__get_date_range(start, end))
-                else:
-                    dates_to_add.append(part.strip())
-        else:
-            dates_to_add.append(dates.strip())
         
-        # Add the dates using the extracted date IDs
-        add_url = "https://xoyondo.com/pc/poll-change-poll"
-        for date in dates_to_add:
-            form_data = {
-                'newdates': date,
-                'ID': self.id,
-                'product': 'd',
-                'operation': 'date_add_cal',  
-                'pass': self.password,
-                'times_selected': 0
-            }
-            add_response = requests.post(add_url, headers=self.headers, data=form_data)
-            if add_response.status_code == 200:
-                self.__output_message(f'Successfully added date {date}', messages)
+        try:
+            dates = str(dates)
+
+            if "," in dates or ":" in dates:
+                parts = dates.split(",")
+                for part in parts:
+                    if ":" in part:
+                        start, end = [x.strip() for x in part.split(":")]
+                        dates, _messages = self.get_date_list(start, end)
+                        messages.extend(_messages)
+                        dates_to_add.extend(dates)
+                    else:
+                        # check for valid date format
+                        try:
+                            datetime.strptime(part.strip(), '%Y/%m/%d')
+                            dates_to_add.append(part.strip())
+                        except ValueError:
+                            raise ValueError(f"Invalid date: {part.strip()}")
             else:
-                self.__output_message(f'Failed to add date {date}: HTTP {add_response.status_code}', messages)
-                
+                # check for valid date format
+                try:
+                    datetime.strptime(dates.strip(), '%Y/%m/%d')
+                    dates_to_add.append(dates.strip())
+                except ValueError:
+                    raise ValueError(f"Invalid date: {dates.strip()}")
+            
+        except ValueError:
+            raise ValueError(f"Invalid input: {dates}")
+            
+        threads = []
+        message_queue = queue.Queue()
+        
+        for date in dates_to_add:
+            thread = threading.Thread(target=self.__add_date, args=("https://xoyondo.com/pc/poll-change-poll", date, message_queue))
+            threads.append(thread)
+            thread.start()
+            
+        for thread in threads:
+            thread.join()
+            
+        while not message_queue.empty():
+            messages.extend(message_queue.get())
+
         return messages
         
         # check if right format (date and list of dates)
         # add every date given in the list of dates
         # if user wanted to add every date give hint, that the last date could not be added due to xoyondo restrictions
         
-    def delete_users(self):
+    def __add_date(self, add_url, date, message_queue):
         messages = []
         
-        html = self.__get_webpage(self.url, self.headers)
+        form_data = {
+            'newdates': date,
+            'ID': self.id,
+            'product': 'd',
+            'operation': 'date_add_cal',  
+            'pass': self.password,
+            'times_selected': 0
+        }
+        add_response = requests.post(add_url, headers=self.headers, data=form_data)
+        if add_response.status_code == 200:
+            self.log_message(f'Successfully added date {date}', messages)
+        else:
+            self.log_message(f'Failed to add date {date}: HTTP {add_response.status_code}', messages)
+                
+        message_queue.put(messages)
+        
+    def get_dates(self):
+        messages = []
+        dates = []
+        
+        html, _messages = self.__get_webpage(self.url, self.headers)
+        messages.extend(_messages)
+        date_elements = html.find_all('i', {'class': 'fa fa-edit js-date-edit-cal text-warning pointer mx-1'})
+        date_to_id = {el['data-date']: el['data-dateid'] for el in date_elements}
+        
+        dates = list(date_to_id.keys())
+        
+        return dates, messages
+        
+        # get all dates
+        
+    def delete_users(self, users: str = None):
+        messages = []
+        user_ids_to_delete = []
+    
+        html, _messages = self.__get_webpage(self.url, self.headers)
+        messages.extend(_messages)
         user_elements = html.find_all('tr', {'class': 'js-user-rows'})
-        user_ids_to_delete = [el['data-userid'] for el in user_elements]
+        
+        if users:  # If usernames are provided
+            user_names_to_delete = [username.strip() for username in users.split(',')]  # Split the usernames string into a list
+
+            # Find the corresponding user ids for the usernames provided
+            for user_element in user_elements:
+                user_name_element = user_element.find('td', {'class': 'table-user-cell'})
+                if user_name_element:
+                    user_elems = list(user_name_element.stripped_strings)
+                    user_name = user_elems[-1]
+                    if user_name in user_names_to_delete:
+                        user_ids_to_delete.append(user_element['data-userid'])
+        else:  # If no username is provided, delete all users
+            user_ids_to_delete = [el['data-userid'] for el in user_elements]
         
         if len(user_ids_to_delete) < 1:
-            self.__output_message("Deletion not possible as there is no user registered.", messages)
-            return messages
+            self.log_message("Deletion not possible as there is no user registered.", messages)
         
         # Delete each user
-        delete_url = "https://xoyondo.com/pc/poll-change-poll-ajax"
+        threads = []
+        message_queue = queue.Queue()
         for user_id in user_ids_to_delete:
-            form_data = {
-                'u': user_id,
-                'ID': self.id,
-                'product': 'd',
-                'operation': 'delete-user',
-                'pass': self.password
-                }
-            delete_response = requests.post(delete_url, headers=self.headers, data=form_data)
-            if delete_response.status_code == 200:
-                self.__output_message(f'Successfully deleted user with ID {user_id}', messages)
-            else:
-                self.__output_message(f'Failed to delete user with ID {user_id}: HTTP {delete_response.status_code}', messages)
-
+            thread = threading.Thread(target=self.__delete_user, args=("https://xoyondo.com/pc/poll-change-poll-ajax", user_id, message_queue))
+            threads.append(thread)
+            thread.start()
+            
+        for thread in threads:
+            thread.join()
+            
+        while not message_queue.empty():
+            messages.extend(message_queue.get())
+        
         return messages
+    
         # delete every user
         
-    def get_vote(self, index=None):
-        html = self.__get_webpage(self.url, self.headers)
+    def __delete_user(self, delete_url, user_id, message_queue):
+        messages = []
+        
+        form_data = {
+            'u': user_id,
+            'ID': self.id,
+            'product': 'd',
+            'operation': 'delete-user',
+            'pass': self.password
+        }
+        delete_response = requests.post(delete_url, headers=self.headers, data=form_data)
+        if delete_response.status_code == 200:
+            self.log_message(f'Successfully deleted user with ID {user_id}', messages)
+        else:
+            self.log_message(f'Failed to delete user with ID {user_id}: HTTP {delete_response.status_code}', messages)
+        
+        message_queue.put(messages)
+    
+    def get_users(self):
+        messages = []
+        users = []
+        
+        html, _messages = self.__get_webpage(self.url, self.headers)
+        messages.extend(_messages)
+        user_elements = html.find_all('tr', {'class': 'js-user-rows'})
+        
+        for user_element in user_elements:
+            user_name_element = user_element.find('td', {'class': 'table-user-cell'})
+            if user_name_element:
+                user_elems = list(user_name_element.stripped_strings)
+                user_name = user_elems[-1]
+                users.append(user_name)
+        
+        return users, messages
+        
+        # get all users
+    
+    def get_votes_by_index(self, index=None):
+        messages = []
+        date_results = {}
+        filtered_results = {}
+        
+        html, _messages = self.__get_webpage(self.url, self.headers)
+        messages.extend(_messages)
         user_rows = html.find_all('tr', class_='js-user-rows')
         
-        date_results = {}
-
-        # Process each user row
         for user_row in user_rows:
-            # Get all vote columns for the user (excluding name columns)
-            vote_columns = user_row.find_all('td', {'class': ['table-danger-cell', 'table-success-cell', 'table-warning-cell']})
+            vote_columns = user_row.find_all('td', {'class': ['table-danger-cell', 'table-success-cell', 'table-warning-cell', 'table-question-cell']})
             
             for idx, column in enumerate(vote_columns):
-                # Check which vote it is based on class
                 if 'table-danger-cell' in column['class']:
                     vote = 'no'
                 elif 'table-success-cell' in column['class']:
                     vote = 'yes'
-                else:
+                elif 'table-warning-cell' in column['class']:
                     vote = 'maybe'
-                
-                # Use the date index as a key for the result dictionary
+                else: 
+                    vote = 'question'
+                    
                 if idx not in date_results:
-                    date_results[idx] = {'yes': 0, 'no': 0, 'maybe': 0}
-                
+                    date_results[idx] = {'yes': 0, 'no': 0, 'maybe': 0, 'question': 0}
+                    
                 date_results[idx][vote] += 1
-
-        # Determine which indices to filter on
+                
         if index is not None:
-            # Adjusting for negative indices
-            if isinstance(index, int):
-                index = [index]
+            index = str(index)
+            indices = []
+            parts = index.split(",")
+            for part in parts:
+                if ":" in part:
+                    start, end = [x.strip() for x in part.split(":")]
+                    
+                    try:
+                        start = int(start)
+                        
+                        try:
+                            end = int(end)
+                            
+                            if start < 0:
+                                start = len(date_results) + start
+                            if len(date_results) <= start or start < 0:
+                                raise ValueError(f"Index {start} out of range.")
+                            if end < 0:
+                                end = len(date_results) + end
+                            if len(date_results) <= end or end < 0:
+                                raise ValueError(f"Index {end} out of range.")
+                            
+                            if start <= end:
+                                indices.extend(range(start, end + 1))
+                            else:
+                                raise ValueError(f"Start index must be less than or equal to end index: {start}:{end}")
+                            
+                        except ValueError:
+                            raise ValueError(f"Invalid index: {end}")
+                        
+                    except ValueError:
+                        raise ValueError(f"Invalid index: {start}")
 
-            if any(i < 0 for i in index):
-                total_dates = len(date_results)
-                index = [(i + total_dates) if i < 0 else i for i in index]
+                else:
+                    try:
+                        indices.append(int(part))
+                    except ValueError:
+                        raise ValueError(f"Invalid index: {part}")
+            indices = [(i + len(date_results)) if i < 0 else i for i in indices]
+            filtered_results = {idx: result for idx, result in date_results.items() if idx in indices}
 
-            # Filter the results
-            filtered_results = {idx: result for idx, result in date_results.items() if idx in index}
         else:
             filtered_results = date_results
-
-        # Format the results
+            
+        
         formatted_results = []
         for idx, counts in filtered_results.items():
             formatted_results.append({
                 'date_index': idx,
                 'yes_count': counts['yes'],
                 'no_count': counts['no'],
-                'maybe_count': counts['maybe']
+                'maybe_count': counts['maybe'],
+                'question_count': counts['question']
             })
-        
-        return formatted_results
+            
+        return formatted_results, messages
         
         # if specific date or dates or range of dates given, give the count of yes, no and maybe of all users for this date
     
-    def get_date_for_index(self, index:int|list):
-        html = self.__get_webpage(self.url, self.headers)
-        
-        # Extracting date to its respective ID
-        date_elements = html.find_all('i', {'class': 'fa fa-edit js-date-edit-cal text-warning pointer mx-1'})
-        date_to_id = {el['data-date']: el['data-dateid'] for el in date_elements}
-        
-        # Handle single integer index
-        if isinstance(index, int):
-            index = [index]
-        
-        # Adjust for negative indices
-        total_dates = len(date_to_id)
-        index = [(i + total_dates) if i < 0 else i for i in index]
-        
-        # Fetch the dates for given indices
-        dates_for_indices = [list(date_to_id.keys())[i] for i in index if 0 <= i < total_dates]
-        
-        return dates_for_indices
-    
-    def get_index_for_date(self, dates:str):
+    def get_votes_by_date(self, dates = None):
         messages = []
+        votes = []
         
-        html = self.__get_webpage(self.url, self.headers)
+        if dates:
+            indices, _messages = self.get_index_for_date(dates)
+            messages.extend(_messages)
+            votes, _messages = self.get_votes_by_index(",".join(str(index) for index in indices))
+            messages.extend(_messages)
+            
+            dates = self.get_date_list(dates)
+        else:
+            dates = []
+            
+            votes, _messages = self.get_votes_by_index()
+            messages.extend(_messages)
+            for vote in votes:
+                date, _message = self.get_date_for_index(vote['date_index'])
+                dates.append(date[0])
+                messages.extend(_message)
+                
+        formatted_results = []
+
+        for idx, vote in enumerate(votes):
+            # Replace the date_index with the corresponding date
+            formatted_results.append({
+                'date': dates[idx],
+                'yes_count': vote['yes_count'],
+                'no_count': vote['no_count'],
+                'maybe_count': vote['maybe_count'],
+                'question_count': vote['question_count']
+            })
+            
+        return formatted_results, messages
+    
+    def get_user_votes(self, user:str = None):
+        messages = []
+        user_votes = {}
+        
+        html, _messages = self.__get_webpage(self.url, self.headers)
+        messages.extend(_messages)
+        user_rows = html.find_all('tr', class_='js-user-rows')
+        
+        for user_row in user_rows:
+            user_name_element = user_row.find('td', {'class': 'table-user-cell'})
+            if user_name_element:
+                user_elems = list(user_name_element.stripped_strings)
+                user_name = user_elems[-1]
+                
+                if user is not None and user_name != user:
+                    continue
+                
+                vote_columns = user_row.find_all('td', {'class': ['table-danger-cell', 'table-success-cell', 'table-warning-cell', 'table-question-cell']})
+                
+                for idx, column in enumerate(vote_columns):
+                    if 'table-danger-cell' in column['class']:
+                        vote = 'no'
+                    elif 'table-success-cell' in column['class']:
+                        vote = 'yes'
+                    elif 'table-warning-cell' in column['class']:
+                        vote = 'maybe'
+                    else: 
+                        vote = 'question'
+                        
+                    if user_name not in user_votes:
+                        user_votes[user_name] = {}
+                        
+                    user_votes[user_name][idx] = vote
+                
+        if len(user_votes) < 1:
+            self.log_message(f"No user found for given name {user}", messages)
+        
+        return user_votes, messages
+        
+        # if specific user or users or range of users given, give the vote of this user for all dates
+    
+    def get_date_for_index(self, index:str = None):
+        messages = []
+        html, _messages = self.__get_webpage(self.url, self.headers)
+        messages.extend(_messages)
+        
         date_elements = html.find_all('i', {'class': 'fa fa-edit js-date-edit-cal text-warning pointer mx-1'})
         date_to_id = {el['data-date']: el['data-dateid'] for el in date_elements}
-        indices_to_return = []
         
-        if not dates:
-            return indices_to_return
-
-        if "," in str(dates) or ":" in str(dates):
-            parts = str(dates).split(",")
+        if index is not None:
+            indices = []
+            index = str(index)
+            parts = index.split(",")
             for part in parts:
                 if ":" in part:
                     start, end = [x.strip() for x in part.split(":")]
-                    valid_dates = [date for date in self.__get_date_range(start, end) if date in date_to_id]
+                    
+                    try:
+                        start = int(start)
+                        try:
+                            end = int(end)
+                            
+                            if start < 0:
+                                start = len(date_to_id) + start
+                            if len(date_to_id) <= start or start < 0:
+                                raise ValueError(f"Index {start} out of range.")
+                            if end < 0:
+                                end = len(date_to_id) + end
+                            if len(date_to_id) <= end or end < 0:
+                                raise ValueError(f"Index {end} out of range.")
+                            
+                            if start <= end:
+                                indices.extend(range(start, end + 1))
+                            else:
+                                raise ValueError(f"Start index must be less than or equal to end index. Given: {start}:{end}")
+                            
+                        except ValueError:
+                            raise ValueError(f"Invalid index: {end}")
+                    
+                    except ValueError:
+                        raise ValueError(f"Invalid index: {start}")
+                else:
+                    try:
+                        idx = int(part)
+                        if idx < 0:
+                            idx = len(date_to_id) + idx
+                        
+                        if 0 <= idx < len(date_to_id):
+                            indices.append(idx)
+                        else:
+                            raise ValueError(f"Index {idx} out of range.")
+                    
+                    except ValueError:
+                        raise ValueError(f"Invalid index: {part}")
+            
+            dates_for_indices = [list(date_to_id.keys())[i] for i in indices]
+        else:
+            dates_for_indices = list(date_to_id.keys())
+        
+        return dates_for_indices, messages
+    
+    def get_index_for_date(self, dates:str):
+        messages = []
+        indices_to_return = []
+        
+        html, _messages = self.__get_webpage(self.url, self.headers)
+        messages.extend(_messages)
+        date_elements = html.find_all('i', {'class': 'fa fa-edit js-date-edit-cal text-warning pointer mx-1'})
+        date_to_id = {el['data-date']: el['data-dateid'] for el in date_elements}
+
+        dates = str(dates)
+        if "," in dates or ":" in dates:
+            parts = dates.split(",")
+            for part in parts:
+                if ":" in part:
+                    start, end = [x.strip() for x in part.split(":")]
+                    dates, _messages = self.get_date_list(start, end)
+                    messages.extend(_messages)
+                    valid_dates = [date for date in dates if date in date_to_id]
                     indices_to_return.extend(list(date_to_id.keys()).index(date) for date in valid_dates)
                 else:
-                    if str(part).strip() in date_to_id:
-                        indices_to_return.append(list(date_to_id.keys()).index(str(part).strip()))
+                    if part.strip() in date_to_id:
+                        indices_to_return.append(list(date_to_id.keys()).index(part.strip()))
                     else:
-                        self.__output_message(f"Invalid date: {str(part).strip()}", messages)
+                        raise ValueError(f"Invalid date: {part.strip()}")
         else:
-            if str(dates).strip() in date_to_id:
-                indices_to_return.append(list(date_to_id.keys()).index(str(dates).strip()))
+            if dates.strip() in date_to_id:
+                indices_to_return.append(list(date_to_id.keys()).index(dates.strip()))
             else:
-                self.__output_message(f"Invalid date: {str(dates).strip()}", messages)
+                raise ValueError(f"Invalid date: {dates.strip()}")
         
         # Remove duplicates while maintaining order
         indices_to_return = list(dict.fromkeys(indices_to_return))
