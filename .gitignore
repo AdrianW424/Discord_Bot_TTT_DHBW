@@ -1,3 +1,4 @@
 .env
 images/
 future_code.py
+__pycache__/
