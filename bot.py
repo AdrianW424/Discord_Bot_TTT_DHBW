@@ -11,14 +11,16 @@ extra_info = False
 COMMAND_PREFIX = '!tf_'
 
 load_dotenv()
-TOKEN = os.getenv('DISCORD_TOKEN')
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents, help_command=None)
 
-xoyow = xyw.Xoyondo_Wrapper("https://xoyondo.com/dp/tDKDAFzoWdtzhBR/hlro3gVHMq")
+XOYONDO_URL = os.getenv('XOYONDO_URL')
+
+xoyow = xyw.Xoyondo_Wrapper(XOYONDO_URL)
 
 possible_commands = {
     'help': 'Zeigt diese Nachricht.',
@@ -72,13 +74,23 @@ async def set_url_c(ctx, url:str):
     try:
         _messages = xoyow.set_url(url)
         
+        # open file .env and change the line with XOYONDO_URL to XOYONDO_URL = url
+        with open('.env', 'r') as f:
+            lines = f.readlines()
+        with open('.env', 'w') as f:
+            for line in lines:
+                if line.startswith('XOYONDO_URL'):
+                    f.write(f'XOYONDO_URL = {url}\n')
+                else:
+                    f.write(line)
+        
         if extra_info:
             output = ''
             for _message in _messages:
                 output += f'> {_message}\n'
             await ctx.send(output)
         
-        await ctx.send(f'URL geändert zu: {url}')
+        await ctx.send(f'URL geändert zu: <{url}>')
     except Exception as e:
         await ctx.send(f':stop_sign: **Fehler** :stop_sign: **-** {e}')
 @set_url_c.error
@@ -121,7 +133,7 @@ async def reset_poll_c(ctx, dates:str, print_link:bool=True):
             await ctx.send(output)
 
         if print_link:
-            await ctx.send(f'@everyone Die Umfrage wurde zurückgesetzt. Unter folgendem Link könnt ihr an der neuen Umfrage teilnehmen: {xoyow.get_url(False)}')
+            await ctx.send(f'@everyone Die Umfrage wurde zurückgesetzt. Unter folgendem Link könnt ihr an der neuen Umfrage teilnehmen: <{xoyow.get_url(False)}>')
         else:
             await ctx.send(f'Die Umfrage wurde zurückgesetzt.')
     except Exception as e:
@@ -158,4 +170,4 @@ async def special_c_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(':stop_sign: **Fehler** :stop_sign: **-** Parameter ist erforderlich!')
 
-bot.run(TOKEN)
+bot.run(DISCORD_TOKEN)
