@@ -1,3 +1,4 @@
+import datetime
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -28,6 +29,18 @@ possible_commands = {
     'special': 'Überraschung!'
 }
 ###############
+
+### functions ###
+def get_current_week(offset=0):
+    day = datetime.date.today() + datetime.timedelta(days=7*offset)
+    year, week, _ = day.isocalendar()
+    return f'{year}/{week}'
+
+def get_current_month(offset=0):
+    day = datetime.date.today() + datetime.timedelta(days=30*offset)
+    year, month = day.year, day.month
+    return f'{year}/{month}'
+#################
 
 @bot.event
 async def on_ready():
@@ -64,8 +77,8 @@ async def set_url_c(ctx, url:str):
             for _message in _messages:
                 output += f'> {_message}\n'
             await ctx.send(output)
-        else:
-            await ctx.send(f'URL geändert zu: {url}')
+        
+        await ctx.send(f'URL geändert zu: {url}')
     except Exception as e:
         await ctx.send(f':stop_sign: **Fehler** :stop_sign: **-** {e}')
 @set_url_c.error
@@ -76,18 +89,41 @@ async def set_url_c_error(ctx, error):
 @bot.command(name='reset_poll')
 async def reset_poll_c(ctx, dates:str, print_link:bool=True):
     try:
+        messages = []
+        if dates.startswith('week_'):
+            year_week = dates.split('week_')[1]
+            
+            if year_week == 'current':
+                year_week = get_current_week()
+            elif year_week == 'next':
+                year_week = get_current_week(offset=1)
+                
+            dates, _messages = xoyow.get_dates_for_week(year_week)
+            messages.extend(_messages)
+        elif dates.startswith('month_'):
+            year_month = dates.split('month_')[1]
+            
+            if year_month == 'current':
+                year_month = get_current_month()
+            elif year_month == 'next':
+                year_month = get_current_month(offset=1)
+                
+            dates, _messages = xoyow.get_dates_for_month(year_month)
+            messages.extend(_messages)
+            
         _messages = xoyow.reset_poll(dates)
+        messages.extend(_messages)
         
         if extra_info:
             output = ''
-            for _message in _messages:
-                output += f'> {_message}\n'
+            for message in messages:
+                output += f'> {message}\n'
             await ctx.send(output)
+
+        if print_link:
+            await ctx.send(f'@everyone Die Umfrage wurde zurückgesetzt. Unter folgendem Link könnt ihr an der neuen Umfrage teilnehmen: {xoyow.get_url(False)}')
         else:
-            if print_link:
-                await ctx.send(f'@everyone Die Umfrage wurde zurückgesetzt. Unter folgendem Link könnt ihr an der neuen Umfrage teilnehmen: {xoyow.get_url(False)}')
-            else:
-                await ctx.send(f'Die Umfrage wurde zurückgesetzt.')
+            await ctx.send(f'Die Umfrage wurde zurückgesetzt.')
     except Exception as e:
         await ctx.send(f':stop_sign: **Fehler** :stop_sign: **-** {e}')
 @reset_poll_c.error
@@ -105,8 +141,8 @@ async def chart_c(ctx):
             for _message in _messages:
                 output += f'> {_message}\n'
             await ctx.send(output)
-        else:
-            await ctx.send(file=discord.File(buf, 'chart.png'))
+        
+        await ctx.send(file=discord.File(buf, 'chart.png'))
     except Exception as e:
         await ctx.send(f':stop_sign: **Fehler** :stop_sign: **-** {e}')
 @chart_c.error

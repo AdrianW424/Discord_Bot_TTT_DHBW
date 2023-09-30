@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 import xoyondo as xy
 
 class Xoyondo_Wrapper(xy.Xoyondo):
-    def get_week(self, week):
+    def get_dates_for_week(self, week):
         # Assuming week is a string in the format 'YYYY/WW'
         messages = []
         date_range = ""
@@ -40,7 +40,7 @@ class Xoyondo_Wrapper(xy.Xoyondo):
     
         # Kalenderwoche heraussuchen und in Datum umwandeln -> zum Beispiel 2023/09/18:2023/09/24 - als range
 
-    def get_month(self, month):
+    def get_dates_for_month(self, month):
         # Assuming month is a string in the format 'YYYY/MM'
         messages = []
         date_range = ""
