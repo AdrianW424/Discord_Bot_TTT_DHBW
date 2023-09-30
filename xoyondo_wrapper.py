@@ -15,25 +15,26 @@ class Xoyondo_Wrapper(xy.Xoyondo):
         
         if isinstance(week, str) and '/' in week:
             year, week_number = [x.strip() for x in week.split('/')]
-            
+            print(year, week_number)
             try:
                 year = int(year)
-                try:
-                    week_number = int(week_number)
-                    try:
-                        first_day_of_week = datetime.datetime.strptime(f'{year}-W{week_number} -1', "%Y-W%W -%w")
-                        last_day_of_week = first_day_of_week + datetime.timedelta(days=6)
-                        date_range = f"{first_day_of_week.strftime('%Y/%m/%d')}:{last_day_of_week.strftime('%Y/%m/%d')}"
-                        
-                        self.log_message(f'{week} corresponds to {date_range}', messages)
-                        
-                        return date_range, messages
-                    except ValueError:
-                        raise ValueError(f'Invalied input: {week}')
-                except ValueError:
-                    raise ValueError(f'Week number {week_number} is not a valid number.')
             except ValueError:
                 raise ValueError(f'Year {year} is not a valid number.')
+            try:
+                week_number = int(week_number)
+            except ValueError:
+                raise ValueError(f'Week number {week_number} is not a valid number.')
+            try:
+                first_day_of_week = datetime.datetime.strptime(f'{year}-W{week_number} -1', "%Y-W%W -%w")
+                last_day_of_week = first_day_of_week + datetime.timedelta(days=6)
+                date_range = f"{first_day_of_week.strftime('%Y/%m/%d')}:{last_day_of_week.strftime('%Y/%m/%d')}"
+                
+                self.log_message(f'{week} corresponds to {date_range}', messages)
+                
+                return date_range, messages
+            except ValueError:
+                raise ValueError(f'Invalied input: {week}')
+            
         else:
             raise ValueError(f'Invalid input: {week}')
     
@@ -49,26 +50,28 @@ class Xoyondo_Wrapper(xy.Xoyondo):
             
             try:
                 year = int(year)
-                try:
-                    month_number = int(month_number)
-                    
-                    # Ensure month_number is between 1 and 12
-                    if 1 <= month_number <= 12:
-                        # Getting the last day of the month
-                        last_day = calendar.monthrange(year, month_number)[1]
-                        first_day_of_month = f'{year}/{month_number}/01'
-                        last_day_of_month = f'{year}/{month_number}/{last_day}'
-                        date_range = f"{first_day_of_month}:{last_day_of_month}"
-                        
-                        self.log_message(f'{month} corresponds to {date_range}', messages)
-                        
-                        return date_range, messages
-                    else:
-                        raise ValueError(f'Month {month_number} is not valid. It should be between 1 and 12.')
-                except ValueError:
-                    raise ValueError(f'Month number {month_number} is not a valid number.')
             except ValueError:
                 raise ValueError(f'Year {year} is not a valid number.')
+            
+            try:
+                month_number = int(month_number)
+            except ValueError:
+                raise ValueError(f'Month number {month_number} is not a valid number.')   
+             
+            # Ensure month_number is between 1 and 12
+            if 1 <= month_number <= 12:
+                # Getting the last day of the month
+                last_day = calendar.monthrange(year, month_number)[1]
+                first_day_of_month = f'{year}/{month_number}/01'
+                last_day_of_month = f'{year}/{month_number}/{last_day}'
+                date_range = f"{first_day_of_month}:{last_day_of_month}"
+                
+                self.log_message(f'{month} corresponds to {date_range}', messages)
+                
+                return date_range, messages
+            else:
+                raise ValueError(f'Month {month_number} is not valid. It should be between 1 and 12.')
+            
         else:
             raise ValueError(f'Invalid input: {month}')
     

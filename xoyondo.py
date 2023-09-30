@@ -107,16 +107,18 @@ class Xoyondo:
         
         try:
             start_date = datetime.strptime(start, '%Y/%m/%d')
-            try:
-                end_date = datetime.strptime(end, '%Y/%m/%d')
-                delta = end_date - start_date
-                date_list = [(start_date + timedelta(days=i)).strftime('%Y/%m/%d') for i in range(delta.days + 1)]
-                self.log_message(f"Generated date list from {start} to {end}", messages)
-                return date_list, messages
-            except ValueError:
-                raise ValueError(f"Invalid end date: {end}")
         except ValueError:
             raise ValueError(f"Invalid start date: {start}")
+        try:
+            end_date = datetime.strptime(end, '%Y/%m/%d')
+        except ValueError:
+            raise ValueError(f"Invalid end date: {end}")
+        
+        delta = end_date - start_date
+        date_list = [(start_date + timedelta(days=i)).strftime('%Y/%m/%d') for i in range(delta.days + 1)]
+        self.log_message(f"Generated date list from {start} to {end}", messages)
+        
+        return date_list, messages
         
     @dispatch(str)
     def get_date_list(self, dates):
@@ -219,30 +221,28 @@ class Xoyondo:
 
                             try:
                                 start = int(start)
-                                
-                                try:
-                                    end = int(end)
-                                    
-                                    if start < 0:
-                                        start = len(date_to_id) + start
-                                    if len(date_to_id) <= start or start < 0:
-                                        raise ValueError(f"Index {start} out of range.")
-                                    if end < 0:
-                                        end = len(date_to_id) + end
-                                    if len(date_to_id) <= end or end < 0:
-                                        raise ValueError(f"Index {end} out of range.")
-
-                                    if start <= end:
-                                        dates_to_delete.extend(date_to_id[date] for i, date in enumerate(date_to_id.keys()) if start <= i <= end)
-                                        self.log_message(f"Added dates from {list(date_to_id.keys())[start]} to {list(date_to_id.keys())[end]} to deletion list", messages)
-                                    else:
-                                        raise ValueError(f"Start index must be less than or equal to end index. Given: {start}:{end}")
-                                    
-                                except ValueError:
-                                    raise ValueError(f"Invalid index: {end.strip()}")
-                                    
                             except ValueError:
-                                raise ValueError(f"Invalid index: {start.strip()}")
+                                raise ValueError(f"Invalid index: {start.strip()}")   
+                             
+                            try:
+                                end = int(end)
+                            except ValueError:
+                                raise ValueError(f"Invalid index: {end.strip()}")    
+                                
+                            if start < 0:
+                                start = len(date_to_id) + start
+                            if len(date_to_id) <= start or start < 0:
+                                raise ValueError(f"Index {start} out of range.")
+                            if end < 0:
+                                end = len(date_to_id) + end
+                            if len(date_to_id) <= end or end < 0:
+                                raise ValueError(f"Index {end} out of range.")
+
+                            if start <= end:
+                                dates_to_delete.extend(date_to_id[date] for i, date in enumerate(date_to_id.keys()) if start <= i <= end)
+                                self.log_message(f"Added dates from {list(date_to_id.keys())[start]} to {list(date_to_id.keys())[end]} to deletion list", messages)
+                            else:
+                                raise ValueError(f"Start index must be less than or equal to end index. Given: {start}:{end}")
                                 
                         else:
                             # dates
@@ -340,35 +340,36 @@ class Xoyondo:
         
         try:
             dates = str(dates)
-
-            if "," in dates or ":" in dates:
-                parts = dates.split(",")
-                for part in parts:
-                    if ":" in part:
-                        start, end = [x.strip() for x in part.split(":")]
-                        dates, _messages = self.get_date_list(start, end)
-                        messages.extend(_messages)
-                        dates_to_add.extend(dates)
-                        self.log_message(f"Added date list from {start} to {end} to add list", messages)
-                    else:
-                        # check for valid date format
-                        try:
-                            datetime.strptime(part.strip(), '%Y/%m/%d')
-                            dates_to_add.append(part.strip())
-                            self.log_message(f"Added date {part.strip()} to add list", messages)
-                        except ValueError:
-                            raise ValueError(f"Invalid date: {part.strip()}")
-            else:
-                # check for valid date format
-                try:
-                    datetime.strptime(dates.strip(), '%Y/%m/%d')
-                    dates_to_add.append(dates.strip())
-                    self.log_message(f"Added date {dates.strip()} to add list", messages)
-                except ValueError:
-                    raise ValueError(f"Invalid date: {dates.strip()}")
-            
         except ValueError:
             raise ValueError(f"Invalid input: {dates}")
+        
+        if "," in dates or ":" in dates:
+            parts = dates.split(",")
+            for part in parts:
+                if ":" in part:
+                    start, end = [x.strip() for x in part.split(":")]
+                    dates, _messages = self.get_date_list(start, end)
+                    messages.extend(_messages)
+                    dates_to_add.extend(dates)
+                    self.log_message(f"Added date list from {start} to {end} to add list", messages)
+                else:
+                    # check for valid date format
+                    try:
+                        datetime.strptime(part.strip(), '%Y/%m/%d')
+                        dates_to_add.append(part.strip())
+                        self.log_message(f"Added date {part.strip()} to add list", messages)
+                    except ValueError:
+                        raise ValueError(f"Invalid date: {part.strip()}")
+        else:
+            # check for valid date format
+            try:
+                datetime.strptime(dates.strip(), '%Y/%m/%d')
+                dates_to_add.append(dates.strip())
+                self.log_message(f"Added date {dates.strip()} to add list", messages)
+            except ValueError:
+                raise ValueError(f"Invalid date: {dates.strip()}")
+            
+        
             
         threads = []
         message_queue = queue.Queue()
@@ -545,30 +546,31 @@ class Xoyondo:
                     
                     try:
                         start = int(start)
-                        
-                        try:
-                            end = int(end)
-                            
-                            if start < 0:
-                                start = len(date_results) + start
-                            if len(date_results) <= start or start < 0:
-                                raise ValueError(f"Index {start} out of range.")
-                            if end < 0:
-                                end = len(date_results) + end
-                            if len(date_results) <= end or end < 0:
-                                raise ValueError(f"Index {end} out of range.")
-                            
-                            if start <= end:
-                                indices.extend(range(start, end + 1))
-                                self.log_message(f"Added indices from {start} to {end} to index list", messages)
-                            else:
-                                raise ValueError(f"Start index must be less than or equal to end index: {start}:{end}")
-                            
-                        except ValueError:
-                            raise ValueError(f"Invalid index: {end}")
-                        
                     except ValueError:
-                        raise ValueError(f"Invalid index: {start}")
+                        raise ValueError(f"Invalid index: {start}")    
+                    try:
+                        end = int(end)
+                    except ValueError:
+                        raise ValueError(f"Invalid index: {end}")
+
+                    if start < 0:
+                        start = len(date_results) + start
+                    if len(date_results) <= start or start < 0:
+                        raise ValueError(f"Index {start} out of range.")
+                    if end < 0:
+                        end = len(date_results) + end
+                    if len(date_results) <= end or end < 0:
+                        raise ValueError(f"Index {end} out of range.")
+                    
+                    if start <= end:
+                        indices.extend(range(start, end + 1))
+                        self.log_message(f"Added indices from {start} to {end} to index list", messages)
+                    else:
+                        raise ValueError(f"Start index must be less than or equal to end index: {start}:{end}")
+                            
+                        
+                        
+                    
 
                 else:
                     try:
@@ -696,29 +698,29 @@ class Xoyondo:
                     
                     try:
                         start = int(start)
-                        try:
-                            end = int(end)
-                            
-                            if start < 0:
-                                start = len(date_to_id) + start
-                            if len(date_to_id) <= start or start < 0:
-                                raise ValueError(f"Index {start} out of range.")
-                            if end < 0:
-                                end = len(date_to_id) + end
-                            if len(date_to_id) <= end or end < 0:
-                                raise ValueError(f"Index {end} out of range.")
-                            
-                            if start <= end:
-                                indices.extend(range(start, end + 1))
-                                self.log_message(f"Added indices from {start} to {end} to index list", messages)
-                            else:
-                                raise ValueError(f"Start index must be less than or equal to end index. Given: {start}:{end}")
-                            
-                        except ValueError:
-                            raise ValueError(f"Invalid index: {end}")
-                    
                     except ValueError:
                         raise ValueError(f"Invalid index: {start}")
+                    
+                    try:
+                        end = int(end)
+                    except ValueError:
+                        raise ValueError(f"Invalid index: {end}")    
+                    
+                    if start < 0:
+                        start = len(date_to_id) + start
+                    if len(date_to_id) <= start or start < 0:
+                        raise ValueError(f"Index {start} out of range.")
+                    if end < 0:
+                        end = len(date_to_id) + end
+                    if len(date_to_id) <= end or end < 0:
+                        raise ValueError(f"Index {end} out of range.")
+                    
+                    if start <= end:
+                        indices.extend(range(start, end + 1))
+                        self.log_message(f"Added indices from {start} to {end} to index list", messages)
+                    else:
+                        raise ValueError(f"Start index must be less than or equal to end index. Given: {start}:{end}")
+                    
                 else:
                     try:
                         idx = int(part)
