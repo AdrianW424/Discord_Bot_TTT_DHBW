@@ -75,6 +75,20 @@ class Xoyondo:
         
         return messages
     
+    def get_url(self, full=False):
+        """Returns the object's URL.
+
+        Args:
+            full (bool, optional): Whether to return the full URL containing the ID and password or just the base URL containing the ID. Defaults to False.
+            
+        Returns:
+            str: The object's URL.
+        """
+        if full:
+            return self.url
+        else:
+            return re.sub(r'/[^/]+$', '', self.url)
+    
     @dispatch(str, str)
     def get_date_list(self, start, end):    # throws ValueError
         """Generate a list of dates in the format '%Y/%m/%d' between two given dates (inclusive).
