@@ -28,7 +28,8 @@ possible_commands = {
     'set_url <url>': 'Setzt die URL der Umfrage auf <url>.',
     'reset_poll <dates>': 'Setzt die Umfrage auf die Daten <dates> zurück.',
     'chart': 'Erstellt ein Diagramm der aktuellen Umfrage.',
-    'special': 'Überraschung!'
+    'special': 'Überraschung!',
+    'special_for_jannik': 'Überraschung für Jannik! |Notiz vom Entwickler: Das ist für dich Jannik :heart:|'
 }
 ###############
 
@@ -167,6 +168,14 @@ async def special_c(ctx):
     await ctx.send('Jannik & Natalie -> :heart: :cupid: :smiling_face_with_3_hearts:')
 @special_c.error
 async def special_c_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(':stop_sign: **Fehler** :stop_sign: **-** Parameter ist erforderlich!')
+        
+@bot.command(name='special_for_jannik')
+async def special_for_jannik_c(ctx):
+    await ctx.send('Adrian & Pauline -> :heart: :cupid: :smiling_face_with_3_hearts:')
+@special_for_jannik_c.error
+async def special_for_jannik_c_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(':stop_sign: **Fehler** :stop_sign: **-** Parameter ist erforderlich!')
 
