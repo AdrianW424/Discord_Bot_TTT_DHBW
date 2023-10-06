@@ -2,6 +2,7 @@
 tbd
 
 ## TODO
+- create anti-spam function for !tf_special and !tf_special_for_jannik
 - create wrapper xoyondo class
     - reset poll
         - add new principle (consistency)

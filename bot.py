@@ -29,7 +29,7 @@ possible_commands = {
     'reset_poll <dates>': 'Setzt die Umfrage auf die Daten <dates> zurück.',
     'chart': 'Erstellt ein Diagramm der aktuellen Umfrage.',
     'special': 'Überraschung!',
-    'special_for_jannik': 'Überraschung für Jannik! |Notiz vom Entwickler: Das ist für dich Jannik :heart:|'
+    'special_for_jannik': 'Überraschung für Jannik! |**Notiz vom Entwickler: Das ist für dich Jannik :heart:**|'
 }
 ###############
 
