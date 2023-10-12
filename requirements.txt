@@ -1,0 +1,8 @@
+bs4
+datetime
+discord
+dotenv
+matplotlib
+multipledispatch
+requests
+urllib
