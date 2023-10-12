@@ -2,7 +2,7 @@
 tbd
 
 ## TODO
-- create anti-spam function for !tf_special and !tf_special_for_jannik
+- erase-function cannot handle emojis
 - create wrapper xoyondo class
     - reset poll
         - add new principle (consistency)

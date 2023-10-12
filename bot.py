@@ -2,7 +2,9 @@ import datetime
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+from fuzzywuzzy import fuzz
 import os
+import pytz
 import xoyondo_wrapper as xyw
 
 ### globals ###
@@ -29,7 +31,8 @@ possible_commands = {
     'reset_poll <dates>': 'Setzt die Umfrage auf die Daten <dates> zurück.',
     'chart': 'Erstellt ein Diagramm der aktuellen Umfrage.',
     'special': 'Überraschung!',
-    'special_for_jannik': 'Überraschung für Jannik! |**Notiz vom Entwickler: Das ist für dich Jannik :heart:**|'
+    'special_for_jannik': 'Überraschung für Jannik! |**Notiz vom Entwickler: Das ist für dich Jannik :heart:**|',
+    'erase': 'Löscht den Command des Users und die dazugehörige Antwort des Bots.'
 }
 ###############
 
@@ -178,5 +181,50 @@ async def special_for_jannik_c(ctx):
 async def special_for_jannik_c_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(':stop_sign: **Fehler** :stop_sign: **-** Parameter ist erforderlich!')
+
+
+@bot.command(name='erase')
+async def erase_c(ctx, text:str, time_delta:int=1, long_answer:bool=False):
+    try:
+        # List to hold messages to be deleted
+        messages_to_delete = []
+
+        # Fetch the recent messages
+        recent_messages = [recent_message async for recent_message in ctx.channel.history(limit=100)]
+        print("Count of messages in channel: ", len(recent_messages))
+
+        for message in recent_messages:
+            # Check time delta first
+            utc_now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+            print(f"Message has been created {utc_now - message.created_at} ago")
+            if (utc_now - message.created_at).seconds > time_delta*60:
+                break
+            
+            print("text: ", text)
+            print(f"Message content: {message.content}")
+
+            # Check if the message is similar to the text string using fuzzy matching
+            print("Message likely to be deleted:", fuzz.ratio(text.lower(), message.content.lower()))
+            if fuzz.ratio(text.lower(), message.content.lower()) >= 80:  # you can adjust the threshold as needed
+                messages_to_delete.append(message)
+
+        # Delete the collected messages
+        for msg in messages_to_delete:
+            await msg.delete()
+
+        # Send a confirmation message and then delete it after a few seconds
+        if long_answer:
+            await ctx.send(f'{len(messages_to_delete)} message(s) similar to `{text}` from the past {time_delta} minute(s) {"has" if len(messages_to_delete) == 1 else "have"} been deleted.')
+        else:
+            await ctx.send(f'{len(messages_to_delete)} message(s) from the past {time_delta} minute(s) {"has" if len(messages_to_delete) == 1 else "have"} been deleted.')
+
+    except Exception as e:
+        await ctx.send(f':stop_sign: **Fehler** :stop_sign: **-** {e}')
+
+@erase_c.error
+async def erase_c_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(':stop_sign: **Fehler** :stop_sign: **-** Parameter ist erforderlich!')
+    
 
 bot.run(DISCORD_TOKEN)

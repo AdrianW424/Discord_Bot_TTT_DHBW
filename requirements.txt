@@ -4,4 +4,6 @@ discord
 matplotlib
 multipledispatch
 python-dotenv
+pytz
 requests
+fuzzywuzzy
