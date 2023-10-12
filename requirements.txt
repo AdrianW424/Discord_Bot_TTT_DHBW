@@ -5,4 +5,3 @@ matplotlib
 multipledispatch
 python-dotenv
 requests
-urllib
