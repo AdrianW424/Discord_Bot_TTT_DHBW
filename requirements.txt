@@ -1,8 +1,8 @@
 bs4
 datetime
 discord
-dotenv
 matplotlib
 multipledispatch
+python-dotenv
 requests
 urllib
