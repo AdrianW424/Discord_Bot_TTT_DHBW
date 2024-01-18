@@ -567,10 +567,6 @@ class Xoyondo:
                         self.log_message(f"Added indices from {start} to {end} to index list", messages)
                     else:
                         raise ValueError(f"Start index must be less than or equal to end index: {start}:{end}")
-                            
-                        
-                        
-                    
 
                 else:
                     try:

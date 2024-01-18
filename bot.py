@@ -22,7 +22,7 @@ bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents, help_command=
 
 XOYONDO_URL = os.getenv('XOYONDO_URL')
 
-xoyow = xyw.Xoyondo_Wrapper(XOYONDO_URL)
+xoyow = xyw.Xoyondo_Wrapper(XOYONDO_URL, print_messages=False)
 
 possible_commands = {
     'help': 'Zeigt diese Nachricht.',
@@ -158,7 +158,8 @@ async def chart_c(ctx):
                 output += f'> {_message}\n'
             await ctx.send(output)
         
-        await ctx.send(file=discord.File(buf, 'chart.png'))
+        for chart in buf:
+            await ctx.send(file=discord.File(chart, 'chart.png'))
     except Exception as e:
         await ctx.send(f':stop_sign: **Fehler** :stop_sign: **-** {e}')
 @chart_c.error

@@ -1,4 +1,5 @@
 .env
 images/
 future_code.py
+test.ipynb
 __pycache__/

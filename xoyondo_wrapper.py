@@ -133,37 +133,48 @@ class Xoyondo_Wrapper(xy.Xoyondo):
             count += votes_for_specific_date[arg]
         return count
             
+
     def create_plot(self, dates=None):
         messages = []
         
-        votes, _messages =  self.get_votes_by_date(dates)
+        votes, _messages = self.get_votes_by_date(dates)
         messages.extend(_messages)
-        
-        if len(votes) > 7:
-            self.log_message(f'Only the first 7 dates will be displayed. {len(votes)} dates were found.', messages)
-            votes = votes[:7]
-        labels = [vote['date'] for vote in votes]
-        yes_count = [int(vote['yes_count']) for vote in votes]
-        no_count = [int(vote['no_count']) for vote in votes]
-        maybe_count = [int(vote['maybe_count']) for vote in votes]
-        question_count = [int(vote['question_count']) for vote in votes]
-        
-        _, ax = plt.subplots(figsize=(10,5))
-        
-        colors = {'Ja': 'g', 'Vielleicht': 'y', 'Nein': 'r', 'Keine Angabe': 'grey'}
-        
-        ax.bar(labels, question_count, color=colors['Keine Angabe'], label='Keine Angabe')
-        ax.bar(labels, no_count, color=colors['Nein'], bottom=question_count, label='Nein')
-        ax.bar(labels, maybe_count, color=colors['Vielleicht'], bottom=list(map(add, question_count, no_count)), label='Vielleicht')
-        ax.bar(labels, yes_count, color=colors['Ja'], bottom=list(map(add, question_count, list(map(add, no_count, maybe_count)))), label='Ja')
-        
-        ax.set_ylabel("Stimmen")
-        ax.legend()
-        
-        # Save the chart as a BytesIO object
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        
-        return buf, messages
+
+        # Function to split the data into chunks of 7
+        def chunk_data(data, size):
+            for i in range(0, len(data), size):
+                yield data[i:i + size]
+
+        # Splitting the votes data into chunks of 7
+        vote_chunks = list(chunk_data(votes, 7))
+
+        plots = []
+        for chunk in vote_chunks:
+            labels = [vote['date'] for vote in chunk]
+            yes_count = [int(vote['yes_count']) for vote in chunk]
+            no_count = [int(vote['no_count']) for vote in chunk]
+            maybe_count = [int(vote['maybe_count']) for vote in chunk]
+            question_count = [int(vote['question_count']) for vote in chunk]
+
+            _, ax = plt.subplots(figsize=(10, 5))
+
+            colors = {'Ja': 'g', 'Vielleicht': 'y', 'Nein': 'r', 'Keine Angabe': 'grey'}
+
+            ax.bar(labels, question_count, color=colors['Keine Angabe'], label='Keine Angabe')
+            ax.bar(labels, no_count, color=colors['Nein'], bottom=question_count, label='Nein')
+            ax.bar(labels, maybe_count, color=colors['Vielleicht'], bottom=list(map(add, question_count, no_count)), label='Vielleicht')
+            ax.bar(labels, yes_count, color=colors['Ja'], bottom=list(map(add, question_count, list(map(add, no_count, maybe_count)))), label='Ja')
+
+            ax.set_ylabel("Stimmen")
+            ax.legend()
+
+            # Save the chart as a BytesIO object and add it to the plots list
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png')
+            buf.seek(0)
+            plots.append(buf)
+
+            plt.close()  # Close the plot to free up memory
+
+        return plots, messages
         
